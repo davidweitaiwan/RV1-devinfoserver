@@ -15,17 +15,17 @@ generic_prop:
     id : 0
 
     # Device information service configuration
-    devInfoService : "devinfo_0" # Service name
+    devInfoService : "devinfo_0" # Service name devinfo_0
     devInterface : "enp0s31f6" # eth0
 
     # QoS service configuration
-    qosService : "qos_0" # Service name
+    qosService : "qos_0" # Service name qos_0
     qosDirPath : "launch/qos"
 
     # Safety service configuration
-    safetyService : "safety_0" # Service name
+    safetyService : "" # Service name safety_0
 
     # Time sync service configuration
-    timesyncService : "timesync_0" # Service name
-    timesyncPeriod_ms : 30000.0
+    timesyncService : "timesync_0" # Service name timesync_0
+    timesyncPeriod_ms : 3000000.0
     timesyncAccuracy_ms : 2.0 # Restrict the duration of sync process time
