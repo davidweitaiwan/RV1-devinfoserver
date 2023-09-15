@@ -1,0 +1,31 @@
+#ver=1.2
+---
+launch_node : "server" # Server: server; Test: pub, sub, control
+devInfoDirPath : "devinfo"
+
+# Settings for Params class under vehicle_interfaces/params.h
+generic_prop:
+    # Node name and namespace. The namespace will automatically adding prefix at node name, topic name, service name, etc..
+    namespace : "V0"
+    nodeName : "qosserver"
+
+    # Device ID, the ID will automatically formed the name of nodes and publisher topics. For instance, 
+    # the node name will be formed as "<nodeName>_<id>_node", and the publisher topic name will be formed as "<topic_name>_<id>". 
+    # Note: If the topic use to be subscriptions, then the topic name will not be formed.
+    id : 0
+
+    # Device information service configuration
+    devInfoService : "devinfo_0" # Service name
+    devInterface : "enp0s31f6" # eth0
+
+    # QoS service configuration
+    qosService : "qos_0" # Service name
+    qosDirPath : "launch/qos"
+
+    # Safety service configuration
+    safetyService : "safety_0" # Service name
+
+    # Time sync service configuration
+    timesyncService : "timesync_0" # Service name
+    timesyncPeriod_ms : 30000.0
+    timesyncAccuracy_ms : 2.0 # Restrict the duration of sync process time
