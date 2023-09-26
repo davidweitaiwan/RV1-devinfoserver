@@ -20,7 +20,7 @@ def generate_launch_description():
             emulate_tty=True,
             parameters=[
                 {
-                    "devInfoDirPath" : data['devInfoDirPath'], 
+                    "devInfoServerDirPath" : data['devInfoServerDirPath'], 
                     
                     # Settings for Params class under vehicle_interfaces/params.h
                     # Do not change the settings rashly
