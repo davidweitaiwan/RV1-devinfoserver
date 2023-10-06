@@ -83,6 +83,7 @@ std::string GenDevInfoContent(DevInfoContentEnum type)
     std::random_device rd_;
     std::mt19937 gen_{rd_()};
     std::string ret = "";
+    std::stringstream ss;
 
     std::uniform_int_distribution<> uniInt26Distrib{0, 25};
     std::uniform_int_distribution<> uniInt255Distrib{1, 255};
@@ -104,8 +105,9 @@ std::string GenDevInfoContent(DevInfoContentEnum type)
         break;
     case DevInfoContentEnum::MAC:
         for (int i = 0; i < 5; i++)
-            ret += (std::stringstream("") << std::setfill('0') << std::setw(2) << std::hex << uniInt255Distrib(gen_)).str() + ":";
-        ret += (std::stringstream("") << std::setfill('0') << std::setw(2) << std::hex << uniInt255Distrib(gen_)).str();
+            ss << std::setfill('0') << std::setw(2) << std::hex << uniInt255Distrib(gen_) << ":";
+        ss << std::setfill('0') << std::setw(2) << std::hex << uniInt255Distrib(gen_);
+        ret += ss.str();
         break;
     case DevInfoContentEnum::IPV4:
         for (int i = 0; i < 3; i++)
@@ -114,8 +116,9 @@ std::string GenDevInfoContent(DevInfoContentEnum type)
         break;
     case DevInfoContentEnum::IPV6:
         for (int i = 0; i < 7; i++)
-            ret += (std::stringstream("") << std::hex << uniInt65535Distrib(gen_)).str() + ":";
-        ret += (std::stringstream("") << std::hex << uniInt65535Distrib(gen_)).str();
+            ss << std::hex << uniInt65535Distrib(gen_) << ":";
+        ss << std::hex << uniInt65535Distrib(gen_);
+        ret += ss.str();
         break;
     default:
         break;
