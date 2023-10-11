@@ -1,4 +1,4 @@
-#ver=1.2
+#ver=1.3
 ---
 launch_node : "server" # Server: server; Test: pub
 devInfoServerDirPath : "devinfoserver/devices"
@@ -17,6 +17,7 @@ generic_prop:
     # Device information service configuration
     devInfoService : "devinfo_0" # Service name devinfo_0
     devInterface : "eth0" # eth0
+    devMultiNode : False # False
 
     # QoS service configuration
     qosService : "qos_0" # Service name qos_0

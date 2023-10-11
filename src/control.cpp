@@ -151,6 +151,7 @@ int main(int argc, char* argv[])
     printf("/** \n\
 * Register \n\
 * g <node_name> <hostname> <ipv4> <mac> \n\
+* gm <node_name> <hostname> <ipv4> <mac> \n\
 * \n\
 * Request \n\
 * q <node_name> <hostname> <ipv4> <mac> \n\
@@ -170,7 +171,8 @@ int main(int argc, char* argv[])
 
         /**
          * Register
-         * g <node_name> <hostname> <ipv4> <mac>
+         * g <node_name> <hostname> <ipv4> <mac> // Register
+         * gm <node_name> <hostname> <ipv4> <mac> // Register multi-node
          * 
          * Request
          * q <node_name> <hostname> <ipv4> <mac>
@@ -178,7 +180,7 @@ int main(int argc, char* argv[])
 
         vehicle_interfaces::msg::DevInfo msg;
 
-        if (inputStrVec[0] == "g")
+        if (inputStrVec[0] == "g" || inputStrVec[0] == "gm")
         {
             if (inputStrVec.size() >= 2)
                 msg.node_name = inputStrVec[1] == "-" ? GenDevInfoContent(NODENAME) : inputStrVec[1];
@@ -199,6 +201,9 @@ int main(int argc, char* argv[])
                 msg.mac_addr = inputStrVec[4] == "-" ? GenDevInfoContent(MAC) : inputStrVec[4];
             else
                 msg.mac_addr = GenDevInfoContent(MAC);
+
+            if (inputStrVec[0] == "gm")
+                msg.multi_node = true;
             
             if (control->regDevInfo(msg))
             {
