@@ -1,6 +1,6 @@
 #ver=2.0
 ---
-launch_node : "server" # Server: server; Test: pub
+launch_node : "server" # Server: server
 devInfoServerDirPath : "devinfoserver/devices"
 
 # Settings for Params class under vehicle_interfaces/params.h

@@ -3,76 +3,31 @@
 #include <iostream>
 #include <sstream>
 
+#include <chrono>
+
 #include <rclcpp/rclcpp.hpp>
 #include "vehicle_interfaces/utils.h"
 #include "vehicle_interfaces/params.h"
 #include "vehicle_interfaces/devinfo.h"
 
-class DevInfoControlNode : public rclcpp::Node
-{
-private:
-    std::shared_ptr<rclcpp::Node> regClientNode_;
-    rclcpp::Client<vehicle_interfaces::srv::DevInfoReg>::SharedPtr regClient_;
+static std::atomic<bool> __global_exit_flag = false;
 
-    std::shared_ptr<rclcpp::Node> reqClientNode_;
-    rclcpp::Client<vehicle_interfaces::srv::DevInfoReq>::SharedPtr reqClient_;
+class Params : public vehicle_interfaces::GenericParams
+{
+public:
+    std::string serviceName = "devinfo_0";
+
+private:
+    void _getParams()
+    {
+        this->get_parameter("serviceName", this->serviceName);
+    }
 
 public:
-    DevInfoControlNode(const std::string& nodeName, const std::string& devInfoServiceName) : rclcpp::Node(nodeName)
+    Params(std::string nodeName) : vehicle_interfaces::GenericParams(nodeName)
     {
-        this->regClientNode_ = rclcpp::Node::make_shared(nodeName + "_devinforeg_client");
-        this->regClient_ = this->regClientNode_->create_client<vehicle_interfaces::srv::DevInfoReg>(devInfoServiceName + "_Reg");
-
-        this->reqClientNode_ = rclcpp::Node::make_shared(nodeName + "_devinforeq_client");
-        this->reqClient_ = this->reqClientNode_->create_client<vehicle_interfaces::srv::DevInfoReq>(devInfoServiceName + "_Req");
-
-        RCLCPP_INFO(this->get_logger(), "[DevInfoControlNode] Constructed");
-
-        bool stopF = false;
-        vehicle_interfaces::ConnToService(this->regClient_, stopF, 1000ms, -1);
-        vehicle_interfaces::ConnToService(this->reqClient_, stopF, 1000ms, -1);
-    }
-
-    bool regDevInfo(const vehicle_interfaces::msg::DevInfo& devInfo)
-    {
-        auto request = std::make_shared<vehicle_interfaces::srv::DevInfoReg::Request>();
-        request->dev_info = devInfo;
-        auto result = this->regClient_->async_send_request(request);
-#if ROS_DISTRO == 0
-        if (rclcpp::spin_until_future_complete(this->regClientNode_, result, 500ms) == rclcpp::executor::FutureReturnCode::SUCCESS)
-#else
-        if (rclcpp::spin_until_future_complete(this->regClientNode_, result, 500ms) == rclcpp::FutureReturnCode::SUCCESS)
-#endif
-        {
-            auto res = result.get();
-            RCLCPP_INFO(this->get_logger(), "[DevInfoControlNode::regDevInfo] Response: %d", res->response);
-            return res->response;
-        }
-        RCLCPP_INFO(this->get_logger(), "[DevInfoControlNode::regDevInfo] Request failed.");
-        return false;
-    }
-
-    bool reqDevInfo(const vehicle_interfaces::msg::DevInfo& reqDevInfo, std::vector<vehicle_interfaces::msg::DevInfo>& devInfoVec)
-    {
-        auto request = std::make_shared<vehicle_interfaces::srv::DevInfoReq::Request>();
-        request->dev_info = reqDevInfo;
-        auto result = this->reqClient_->async_send_request(request);
-#if ROS_DISTRO == 0
-        if (rclcpp::spin_until_future_complete(this->reqClientNode_, result, 500ms) == rclcpp::executor::FutureReturnCode::SUCCESS)
-#else
-        if (rclcpp::spin_until_future_complete(this->reqClientNode_, result, 500ms) == rclcpp::FutureReturnCode::SUCCESS)
-#endif
-        {
-            auto res = result.get();
-            RCLCPP_INFO(this->get_logger(), "[DevInfoControlNode::reqDevInfo] Response: %d, size: %ld", res->response, res->dev_info_vec.size());
-            if (res->response)
-            {
-                devInfoVec = res->dev_info_vec;
-            }
-            return res->response;
-        }
-        RCLCPP_INFO(this->get_logger(), "[DevInfoControlNode::reqDevInfo] Request failed.");
-        return false;
+        this->declare_parameter<std::string>("serviceName", this->serviceName);
+        this->_getParams();
     }
 };
 
@@ -126,41 +81,85 @@ std::string GenDevInfoContent(DevInfoContentEnum type)
     return ret;
 }
 
-void SpinExecutor(rclcpp::executors::SingleThreadedExecutor* exec, bool& stopF)
+std::shared_ptr<rclcpp::Node> GenTmpNode(std::string prefix = "tmp_")
 {
-    std::this_thread::sleep_for(1s);
-    printf("[SpinExecutor] Spin start.\n");
-    stopF = false;
-    exec->spin();
-    printf("[SpinExecutor] Spin ended.\n");
-    stopF = true;
+    auto ts = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    return rclcpp::Node::make_shared(prefix + std::to_string(ts) + "_node");
+}
+
+vehicle_interfaces::ReasonResult<bool> SendRegister(std::string serviceName, vehicle_interfaces::srv::DevInfoReg::Request::SharedPtr request)
+{
+    auto node = GenTmpNode("devinfocontrol_");
+    auto client = node->create_client<vehicle_interfaces::srv::DevInfoReg>(serviceName);
+    auto result = client->async_send_request(request);
+#if ROS_DISTRO == 0
+    if (rclcpp::spin_until_future_complete(node, result, 500ms) == rclcpp::executor::FutureReturnCode::SUCCESS)
+#else
+    if (rclcpp::spin_until_future_complete(node, result, 500ms) == rclcpp::FutureReturnCode::SUCCESS)
+#endif
+    {
+        auto res = result.get();
+        return { res->response, "" };
+    }
+    return { false, "Request failed." };
+}
+
+vehicle_interfaces::ReasonResult<bool> SendRequest(std::string serviceName, vehicle_interfaces::srv::DevInfoReq::Request::SharedPtr req, std::vector<vehicle_interfaces::msg::DevInfo>& devQue)
+{
+    auto node = GenTmpNode("devinfocontrol_");
+    auto client = node->create_client<vehicle_interfaces::srv::DevInfoReq>(serviceName);
+    auto result = client->async_send_request(req);
+#if ROS_DISTRO == 0
+    if (rclcpp::spin_until_future_complete(node, result, 500ms) == rclcpp::executor::FutureReturnCode::SUCCESS)
+#else
+    if (rclcpp::spin_until_future_complete(node, result, 500ms) == rclcpp::FutureReturnCode::SUCCESS)
+#endif
+    {
+        auto res = result.get();
+        if (res->response && res->dev_info_vec.size() > 0)
+            devQue = res->dev_info_vec;
+        return { res->response, "" };
+    }
+    return { false, "Request failed." };
+}
+
+void PrintHelp()
+{
+    printf("/** \n\
+ * Register: \n\
+ *   g <node_name> <hostname> <ipv4> <mac> \n\
+ *   gm <node_name> <hostname> <ipv4> <mac> \n\
+ * \n\
+ * Request: \n\
+ *   q <node_name> <hostname> <ipv4> <mac> \n\
+ *   q all \n\
+ * \n\
+ * Ignore item: '-' \n\
+ * \n\
+ * Quit: \n\
+ *   !\n\
+ * Help: \n\
+ *   ?\n\
+ */\n");
 }
 
 int main(int argc, char* argv[])
 {
+    // ctrl-c handler
+    signal(SIGINT, 
+        [](int)
+        {
+            __global_exit_flag = true;
+        });
+
     rclcpp::init(argc, argv);
-    auto control = std::make_shared<DevInfoControlNode>("devinfocontrol_0_node", "devinfo_0");
-    rclcpp::executors::SingleThreadedExecutor* exec = new rclcpp::executors::SingleThreadedExecutor();
-    exec->add_node(control);
-    bool stopF = true;
-    auto th = std::thread(SpinExecutor, exec, std::ref(stopF));
+    auto params = std::make_shared<Params>("devinfocontrol_params_node");
+    std::cout << "Service name: " << params->serviceName << std::endl;
+    PrintHelp();
 
-    while (stopF)
-        std::this_thread::sleep_for(500ms);
-
-    printf("/** \n\
-* Register \n\
-* g <node_name> <hostname> <ipv4> <mac> \n\
-* gm <node_name> <hostname> <ipv4> <mac> \n\
-* \n\
-* Request \n\
-* q <node_name> <hostname> <ipv4> <mac> \n\
-* \n\
-* Ignore item: '-' \n\
-*/\n");
-
-    while (!stopF)
+    while (!__global_exit_flag)
     {
+        std::this_thread::sleep_for(100ms);
         printf(">");
         std::string inputStr;
         std::getline(std::cin, inputStr);
@@ -168,81 +167,69 @@ int main(int argc, char* argv[])
         if (inputStr.size() < 1)
             continue;
         auto inputStrVec = vehicle_interfaces::split(inputStr, ", ");
-
-        /**
-         * Register
-         * g <node_name> <hostname> <ipv4> <mac> // Register
-         * gm <node_name> <hostname> <ipv4> <mac> // Register multi-node
-         * 
-         * Request
-         * q <node_name> <hostname> <ipv4> <mac>
-         */
-
-        vehicle_interfaces::msg::DevInfo msg;
+        if (inputStrVec.size() == 1 && inputStrVec[0] == "!")
+            __global_exit_flag = true;
+        else if (inputStrVec.size() == 1 && inputStrVec[0] == "?")
+            PrintHelp();
 
         if (inputStrVec[0] == "g" || inputStrVec[0] == "gm")
         {
+            auto req = std::make_shared<vehicle_interfaces::srv::DevInfoReg::Request>();
+
             if (inputStrVec.size() >= 2)
-                msg.node_name = inputStrVec[1] == "-" ? GenDevInfoContent(NODENAME) : inputStrVec[1];
+                req->dev_info.node_name = inputStrVec[1] == "-" ? GenDevInfoContent(NODENAME) : inputStrVec[1];
             else
-                msg.node_name = GenDevInfoContent(NODENAME);
+                req->dev_info.node_name = GenDevInfoContent(NODENAME);
 
             if (inputStrVec.size() >= 3)
-                msg.hostname = inputStrVec[2] == "-" ? GenDevInfoContent(HOSTNAME) : inputStrVec[2];
+                req->dev_info.hostname = inputStrVec[2] == "-" ? GenDevInfoContent(HOSTNAME) : inputStrVec[2];
             else
-                msg.hostname = GenDevInfoContent(HOSTNAME);
+                req->dev_info.hostname = GenDevInfoContent(HOSTNAME);
 
             if (inputStrVec.size() >= 4)
-                msg.ipv4_addr = inputStrVec[3] == "-" ? GenDevInfoContent(IPV4) : inputStrVec[3];
+                req->dev_info.ipv4_addr = inputStrVec[3] == "-" ? GenDevInfoContent(IPV4) : inputStrVec[3];
             else
-                msg.ipv4_addr = GenDevInfoContent(IPV4);
+                req->dev_info.ipv4_addr = GenDevInfoContent(IPV4);
 
             if (inputStrVec.size() >= 5)
-                msg.mac_addr = inputStrVec[4] == "-" ? GenDevInfoContent(MAC) : inputStrVec[4];
+                req->dev_info.mac_addr = inputStrVec[4] == "-" ? GenDevInfoContent(MAC) : inputStrVec[4];
             else
-                msg.mac_addr = GenDevInfoContent(MAC);
+                req->dev_info.mac_addr = GenDevInfoContent(MAC);
 
             if (inputStrVec[0] == "gm")
-                msg.multi_node = true;
-            
-            if (control->regDevInfo(msg))
-            {
-                printf("Reg: %s[%s]\t%s/%s\n", 
-                        msg.node_name.c_str(), 
-                        msg.hostname.c_str(), 
-                        msg.ipv4_addr.c_str(), 
-                        msg.mac_addr.c_str());
-            }
+                req->dev_info.multi_node = true;
+
+            std::cout << "Reg: " << req->dev_info.node_name << "[" << req->dev_info.hostname << "]\t" << req->dev_info.ipv4_addr << "/" << req->dev_info.mac_addr << std::endl;
+            auto res = SendRegister(params->serviceName + "_Reg", req);
+            std::cout << std::boolalpha << "Request: " << res.result << " Reason: " << res.reason << std::endl;
         }
         else if (inputStrVec[0] == "q")
         {
+            auto req = std::make_shared<vehicle_interfaces::srv::DevInfoReq::Request>();
+
             if (inputStrVec.size() > 1)
-                msg.node_name = inputStrVec[1] == "-" ? "" : inputStrVec[1];
+                req->dev_info.node_name = inputStrVec[1] == "-" ? "" : inputStrVec[1];
             if (inputStrVec.size() > 2)
-                msg.hostname = inputStrVec[2] == "-" ? "" : inputStrVec[2];
+                req->dev_info.hostname = inputStrVec[2] == "-" ? "" : inputStrVec[2];
             if (inputStrVec.size() > 3)
-                msg.ipv4_addr = inputStrVec[3] == "-" ? "" : inputStrVec[3];
+                req->dev_info.ipv4_addr = inputStrVec[3] == "-" ? "" : inputStrVec[3];
             if (inputStrVec.size() > 4)
-                msg.mac_addr = inputStrVec[4] == "-" ? "" : inputStrVec[4];
+                req->dev_info.mac_addr = inputStrVec[4] == "-" ? "" : inputStrVec[4];
 
             std::vector<vehicle_interfaces::msg::DevInfo> ret;
-            if (control->reqDevInfo(msg, ret))
+            auto res = SendRequest(params->serviceName + "_Req", req, ret);
+            std::cout << std::boolalpha << "Request: " << res.result << " Reason: " << res.reason << std::endl;
+            if (res.result)
             {
-                printf("Req:\n");
-                for (const auto& i : ret)
+                std::cout << std::left << std::setw(5) << "NO." << std::setw(28) << "NODE" << std::setw(20) << "HOST" << std::setw(16) << "IPv4" << "MAC" << std::endl;
+                std::cout << "--------------------------------------------------------------------------------------" << std::endl;
+                for (int i = 0; i < ret.size(); i++)
                 {
-                    printf("\t%s[%s]\t%s/%s\n", 
-                            i.node_name.c_str(), 
-                            i.hostname.c_str(), 
-                            i.ipv4_addr.c_str(), 
-                            i.mac_addr.c_str());
+                    std::cout << std::left << std::setw(5) << i << std::setw(28) << ret[i].node_name << std::setw(20) << ret[i].hostname << std::setw(16) << ret[i].ipv4_addr << ret[i].mac_addr << std::endl;
                 }
             }
         }
-
-        std::this_thread::sleep_for(500ms);
     }
 
-    th.join();
     rclcpp::shutdown();
 }
